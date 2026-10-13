@@ -1,36 +1,49 @@
-# Publicar TurnoPro con Vercel
+# Publicar TurnoPro con Vercel y Aiven
 
-## Lo que puede alojar Vercel
+Este repositorio despliega la interfaz Vite y la API Node.js como un solo proyecto de Vercel. MySQL se aloja en Aiven. El backend Java/Spring se conserva para desarrollo local, pero no se despliega en Vercel.
 
-El frontend Vite es un sitio estático. El backend de este repositorio es Spring Boot/Java y la base de datos es MySQL. Vercel publica el frontend, pero sus runtimes oficiales para funciones no incluyen Java; el backend y MySQL requieren un servidor externo compatible. La página en Vercel sin esas dos piezas puede abrirse desde cualquier dispositivo, pero iniciar sesión, generar/consultar turnos y recibir llamados no funcionará.
+## 1. Crear MySQL en Aiven
 
-## Preparar el despliegue del frontend
+1. Abre [Aiven Console](https://console.aiven.io/) e inicia sesión.
+2. Crea un servicio **MySQL**. Selecciona una región cercana y el plan que esté disponible en tu cuenta.
+3. Espera a que el servicio esté listo. En **Overview / Connection information**, copia host, puerto, usuario y contraseña. Mantén esos datos privados.
+4. Descarga el certificado CA del servicio desde la sección de conexión TLS/SSL. Se configurará como variable privada `DB_SSL_CA` en Vercel.
+5. Abre **Query editor** o conecta un cliente MySQL con TLS y ejecuta `database/turnopro_db.sql`. Comprueba que existan `servicios`, `turnos` y `historial_turnos`.
 
-1. Sube el repositorio a un proveedor Git compatible con Vercel o impórtalo desde el panel de Vercel.
-2. En el proyecto Vercel define **Root Directory** como `frontend`.
-3. Configura el framework como **Vite**, el comando de build `npm run build` y el directorio de salida `dist`.
-4. Agrega en **Settings → Environment Variables** `VITE_API_URL` con la URL pública del backend seguida por `/api`, y `VITE_WS_URL` con la URL pública del backend seguida por `/ws`. Usa `https://` para ambos.
-5. Publica y comprueba que `/`, `/nuevo`, `/consulta`, `/admin` y `/pantalla` carguen. `frontend/vercel.json` reescribe las rutas del cliente a la SPA.
+## 2. Conectar el mismo repositorio en Vercel
 
-## Despliegue completo de bajo costo para demo
+1. Abre [Vercel New Project](https://vercel.com/new), inicia sesión y elige **Import Git Repository**.
+2. Autoriza GitHub si Vercel lo solicita y selecciona `fernan4895/TurnoApp`.
+3. Deja **Root Directory** en `./` (raíz del repositorio). No elijas `frontend`.
+4. Vercel detecta el `vercel.json` del repositorio. Mantén el comando de build `npm run build` y el directorio de salida `frontend/dist`.
+5. Antes de desplegar, agrega las variables de entorno indicadas abajo para **Production** (y Preview si también deseas que las vistas previas consulten la base real). No uses prefijo `VITE_` para secretos.
+6. Pulsa **Deploy**. Los siguientes pushes a la rama `main` actualizarán el mismo proyecto.
 
-El repositorio incluye un `backend/Dockerfile` y `render.yaml` para el API. Render admite contenedores Java mediante Docker y entrega un subdominio público; el esquema propone su plan Free. Para MySQL, Aiven ofrece un plan Free con un nodo, 1 GB de RAM y 1 GB de almacenamiento, con apagado posible si queda inactivo. Estos planes sirven para una demo: los servicios web gratuitos de Render se duermen tras 15 minutos sin tráfico y tardan alrededor de un minuto en despertar; no equivalen a una instancia disponible continuamente. [Render: límites Free](https://render.com/docs/free) · [Aiven: MySQL Free](https://aiven.io/docs/products/mysql/concepts/mysql-free-tier)
+## 3. Variables privadas en Vercel
 
-1. Sube el proyecto completo a GitHub/GitLab y conecta ese repositorio con Render. Crea un Blueprint usando el archivo `render.yaml`; selecciona un plan Free para `turnopro-api`.
-2. Crea un servicio MySQL Free en Aiven. Anota host, puerto, usuario y contraseña privados. En Aiven habilita acceso de red para Render y usa TLS. Limita el acceso según las opciones disponibles en tu cuenta.
-3. Crea la base `turnopro_db` y ejecuta `database/turnopro_db.sql` contra el servicio MySQL. El backend usa `ddl-auto=validate`, por lo que requiere las tablas antes de arrancar.
-4. En Render configura `DB_URL` con la forma `jdbc:mysql://HOST:PUERTO/turnopro_db?sslMode=REQUIRED&serverTimezone=UTC`; completa `DB_USERNAME`, `DB_PASSWORD`, `ADMIN_INITIAL_USERNAME` y `ADMIN_INITIAL_PASSWORD` en la configuración privada del servicio. Render genera `JWT_SECRET` en el Blueprint. No compartas secretos por chat ni los subas a Git.
-5. Cuando el servicio pase el health check, copia la URL `https://...onrender.com`. En Vercel establece `VITE_API_URL=https://...onrender.com/api` y `VITE_WS_URL=https://...onrender.com/ws` y vuelve a desplegar el frontend.
-6. Copia el origen público de Vercel (solo `https://<proyecto>.vercel.app`, sin ruta) en `CORS_ORIGINS` del backend y vuelve a desplegar el API.
-7. Comprueba login, generación y consulta de turno, llamada desde `/admin` y pantalla `/pantalla` en otro dispositivo.
+En **Project → Settings → Environment Variables**, agrega:
 
-La instancia gratuita de Render puede tardar hasta cerca de un minuto al recibir la primera visita después de dormir. Aiven puede apagar un MySQL Free que permanezca inactivo y no ofrece SLA de disponibilidad. Para un negocio que requiera atención continua, respaldo operativo y datos de clientes, habrá que elegir capacidad de pago con disponibilidad y recuperación adecuadas.
+| Variable | Valor |
+|---|---|
+| `DB_HOST` | Host de conexión mostrado por Aiven |
+| `DB_PORT` | Puerto mostrado por Aiven, normalmente 3306 |
+| `DB_NAME` | `turnopro_db` |
+| `DB_USER` | Usuario de conexión de Aiven |
+| `DB_PASSWORD` | Contraseña de conexión de Aiven |
+| `DB_SSL_CA` | Contenido PEM del certificado CA que descargaste |
+| `JWT_SECRET` | Cadena aleatoria larga y privada (mínimo 32 caracteres) |
+| `ADMIN_INITIAL_USERNAME` | Usuario que usarás para `/admin` |
+| `ADMIN_INITIAL_PASSWORD` | Contraseña privada para `/admin` |
 
-## Requisitos para que la aplicación sea funcional
+No pongas contraseñas en archivos del repositorio, en variables `VITE_*` ni en el chat. Tras cambiar variables, crea un nuevo deployment para aplicarlas.
 
-- Desplegar `backend/` en un servicio que mantenga vivo un proceso Spring Boot con Java 21 y permita WebSocket/STOMP (incluyendo SockJS).
-- Alojar MySQL en una instancia pública protegida, importar `database/turnopro_db.sql` y configurar `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET`, `ADMIN_INITIAL_USERNAME`, `ADMIN_INITIAL_PASSWORD` y `CORS_ORIGINS` en el backend.
-- Incluir el dominio de producción de Vercel en `CORS_ORIGINS`. Si se usan dominios Preview, agregarlos explícitamente o evitar habilitar orígenes comodín.
-- Mantener API y base de datos accesibles desde Internet con TLS y credenciales seguras. No pongas secretos MySQL/JWT en variables `VITE_*`: Vite las inserta en el JavaScript público.
+## 4. Verificar
 
-Para completar una publicación funcional se necesita la URL pública elegida para el backend/MySQL (o elegir un proveedor para alojarlos) y acceso a una cuenta Vercel autenticada. El frontend se puede publicar antes, pero quedará como interfaz sin operaciones reales.
+Cuando Vercel muestre el dominio `https://...vercel.app`:
+
+1. Abre `/api/health`; debe responder `{"status":"UP"}`.
+2. Abre `/nuevo`, crea un turno de prueba y guarda su número y código de consulta.
+3. Abre `/consulta` y verifica ese turno.
+4. Entra a `/admin` con las variables `ADMIN_INITIAL_*`, llama el turno y confirma que `/pantalla` se actualiza en unos segundos.
+
+La pantalla usa consultas periódicas; no requiere un servicio WebSocket adicional. Aiven y Vercel pueden tener límites según el plan seleccionado. Para producción con datos reales, elige disponibilidad, respaldos y capacidad adecuados.

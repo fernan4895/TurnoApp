@@ -1,5 +1,5 @@
 import axios from 'axios';
-export const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api', timeout: 10000 });
+export const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080/api' : '/api'), timeout: 20000 });
 api.interceptors.request.use(config => { const token = sessionStorage.getItem('turnopro-token'); if (token) config.headers.Authorization = `Bearer ${token}`; return config; });
 export type Service = { id: number; name: string; description: string; prefix: string; averageMinutes: number };
 export type Ticket = { id: number; number: string; service: string; status: string; ahead: number; estimatedMinutes: number; createdAt: string; consultationCode?: string };
